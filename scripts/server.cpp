@@ -4,7 +4,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <queue>
+#include <vector>
+#include <atomic>
 #include <sstream>
 using namespace std;
 #define MAX 500
@@ -14,8 +15,10 @@ struct Proceso
 	int burst;
 	int prioridad;
 };
-queue<Proceso> ready;
+vector<Proceso> ready;
 pthread_mutex_t readyLock;
+atomic<bool> corriendo(true);
+
 void *esperaMensaje(void *con)
 {
 	int connection = *((int *)(&con));
@@ -25,9 +28,7 @@ void *esperaMensaje(void *con)
 		int rMsgSize;
 		if ((rMsgSize = recv(connection, buff, MAX, 0)) > 0)
 		{
-
 			cout << "Client : " << buff << endl;
-
 			if (buff[0] == 'b' && buff[1] == 'y' && buff[2] == 'e')
 			{
 				cout << "Server : Bye " << endl;
@@ -37,10 +38,9 @@ void *esperaMensaje(void *con)
 				ss << "Largo = " << ready.size() << endl;
 				ss << "Elementos:" << endl;
 				Proceso p;
-				while (!ready.empty())
+				for (int i = 0; i < ready.size(); i++)
 				{
-					p = ready.front();
-					ready.pop();
+					p = ready.at(i);
 					ss << p.burst << ',' << p.prioridad << endl;
 				}
 				int l = ss.str().length();
@@ -49,13 +49,14 @@ void *esperaMensaje(void *con)
 					buff[i] = ss.get();
 				}
 				send(connection, buff, strlen(buff) + 1, 0);
+				corriendo = false;
 				break;
 			}
 			else
 			{
 				string linea = buff;
 				pthread_mutex_lock(&readyLock);
-				ready.push({atoi(linea.substr(0, linea.find(',')).c_str()), atoi(linea.substr(linea.find(','), linea.length()).c_str())});
+				ready.push_back({atoi(linea.substr(0, linea.find(',')).c_str()), atoi(linea.substr(linea.find(','), linea.length()).c_str())});
 				pthread_mutex_unlock(&readyLock);
 			}
 		}
@@ -63,6 +64,24 @@ void *esperaMensaje(void *con)
 	pthread_exit(NULL);
 }
 
+void *algoritmoFIFO(void *)
+{
+	Proceso p;
+	while (corriendo.load())
+	{
+		pthread_mutex_lock(&readyLock);
+		if (ready.size() > 0)
+		{
+			p = ready.at(0);
+			ready.erase(ready.begin());
+		}
+		pthread_mutex_unlock(&readyLock);
+		cout << "Me voy a dormir " << p.burst << " segundos." << endl;
+		sleep(p.burst);
+	}
+	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
+	pthread_exit(NULL);
+}
 void *server(void *)
 {
 	int serverSocketHandler = socket(AF_INET, SOCK_STREAM, 0);
@@ -128,7 +147,6 @@ void *server(void *)
 	}
 	pthread_exit(NULL);
 }
-
 int main()
 {
 	int rc;
@@ -139,6 +157,8 @@ int main()
 		cout << "Error:unable to create thread," << rc << endl;
 		exit(-1);
 	}
+	pthread_t procesador;
+	pthread_create(&procesador, NULL, algoritmoFIFO, NULL);
 	cout << ready.size() << endl;
 	pthread_exit(NULL);
 }
