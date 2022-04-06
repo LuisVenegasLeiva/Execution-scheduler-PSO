@@ -7,18 +7,29 @@
 #include <vector>
 #include <atomic>
 #include <sstream>
+#include <chrono>
+#include <mutex>
+
 using namespace std;
+using chrono::duration_cast;
+using chrono::milliseconds;
+
 #define MAX 500
 #define port 5200
+
 struct Proceso
 {
 	int burst;
 	int prioridad;
+	int pid;
 };
+
 vector<Proceso> ready;
 pthread_mutex_t readyLock;
+mutex ociosidad;
 atomic<bool> corriendo(true);
-
+atomic<int> pid(0);
+atomic<long> tiempoOcioso(0);
 void *esperaMensaje(void *con)
 {
 	int connection = *((int *)(&con));
@@ -43,12 +54,11 @@ void *esperaMensaje(void *con)
 					p = ready.at(i);
 					ss << p.burst << ',' << p.prioridad << endl;
 				}
+				ss << "Y estuvo " << tiempoOcioso << " milisegundos haciendo nada." << endl;
 				int l = ss.str().length();
 				for (int i = 0; i < l; i++)
-				{
 					buff[i] = ss.get();
-				}
-				send(connection, buff, strlen(buff) + 1, 0);
+				send(connection, buff, l + 1, 0);
 				corriendo = false;
 				break;
 			}
@@ -56,8 +66,15 @@ void *esperaMensaje(void *con)
 			{
 				string linea = buff;
 				pthread_mutex_lock(&readyLock);
-				ready.push_back({atoi(linea.substr(0, linea.find(',')).c_str()), atoi(linea.substr(linea.find(','), linea.length()).c_str())});
+				ready.push_back({atoi(linea.substr(0, linea.find(',')).c_str()), atoi(linea.substr(linea.find(','), linea.length()).c_str()), pid++});
+				if (ready.size() == 1)
+					ociosidad.unlock();
 				pthread_mutex_unlock(&readyLock);
+				linea = "pid = " + to_string(pid) + ".";
+				int l = linea.length();
+				for (int i = 0; i < l; i++)
+					buff[i] = linea.at(i);
+				send(connection, buff, l + 1, 0);
 			}
 		}
 	}
@@ -66,18 +83,34 @@ void *esperaMensaje(void *con)
 
 void *algoritmoFIFO(void *)
 {
-	Proceso p;
+	cout << "A partir de ahora se ejecutarán los procesos en orden FIFO." << endl;
+	ociosidad.lock();
+	ociosidad.lock();
 	while (corriendo.load())
 	{
+		Proceso p;
+		bool flag = false;
 		pthread_mutex_lock(&readyLock);
 		if (ready.size() > 0)
 		{
 			p = ready.at(0);
 			ready.erase(ready.begin());
+			flag = true;
 		}
 		pthread_mutex_unlock(&readyLock);
-		cout << "Me voy a dormir " << p.burst << " segundos." << endl;
-		sleep(p.burst);
+		if (flag)
+		{
+			cout << "Voy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos." << endl;
+			sleep(p.burst);
+		}
+		else
+		{
+			const auto estampa = chrono::system_clock::now();
+			cout << "Estoy ocioso." << endl;
+			ociosidad.lock();
+			cout << "Llegó alguien y me desperté." << endl;
+			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
+		}
 	}
 	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
 	pthread_exit(NULL);
@@ -159,6 +192,5 @@ int main()
 	}
 	pthread_t procesador;
 	pthread_create(&procesador, NULL, algoritmoFIFO, NULL);
-	cout << ready.size() << endl;
 	pthread_exit(NULL);
 }
