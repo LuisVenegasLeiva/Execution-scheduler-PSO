@@ -83,15 +83,16 @@ void *esperaMensaje(void *con)
 			{
 				string linea = buff;
 				pthread_mutex_lock(&readyLock);
-				ready.push_back({atoi(linea.substr(0, linea.find(',')).c_str()), atoi(linea.substr(linea.find(','), linea.length()).c_str()), pid++});
+				ready.push_back({atoi(linea.substr(0, linea.find(',')).c_str()), atoi(linea.substr(linea.find(',')+1, linea.length()).c_str()), pid++});
 				if (ready.size() == 1)
 					ociosidad.unlock();
 				pthread_mutex_unlock(&readyLock);
-				linea = "pid = " + to_string(pid) + ".";
+				linea = "pid = " + to_string(pid-1) + ".\n";
+				char buff1[MAX];
 				int l = linea.length();
 				for (int i = 0; i < l; i++)
-					buff[i] = linea.at(i);
-				send(connection, buff, l + 1, 0);
+					buff1[i] = linea.at(i);
+				send(connection, buff1, l + 1, 0);
 			}
 		}
 	}
