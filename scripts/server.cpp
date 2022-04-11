@@ -40,6 +40,7 @@ mutex ociosidad;
 atomic<bool> corriendo(true);
 atomic<int> pid(0);
 atomic<long> tiempoOcioso(0);
+int q = 3;
 void *esperaMensaje(void *con)
 {
 	int connection = *((int *)(&con));
@@ -121,18 +122,22 @@ void *esperaMensaje(void *con)
 				string linea = buff;
 				pthread_mutex_lock(&readyLock);
 				ready.push_back({atoi(linea.substr(0, linea.find(',')).c_str()), atoi(linea.substr(linea.find(',') + 1, linea.length()).c_str()), pid++});
-
 				time_t timer = time(NULL);
 				listPCB.push_back({pid - 1, 0, timer, timer});
 				if (ready.size() == 1)
+				{
+					cout << "Se acaba de añadir el primer proceso, desbloqueando la ociosidad." << endl;
 					ociosidad.unlock();
+					cout << "Se desbloqueó la ociosidad." << endl;
+				}
 				pthread_mutex_unlock(&readyLock);
 				linea = "pid = " + to_string(pid - 1) + ".\n";
 				char buff1[MAX];
 				int l = linea.length();
 				for (int i = 0; i < l; i++)
 					buff1[i] = linea.at(i);
-				send(connection, buff1, l + 1, 0);
+				cout << "Se recibió el proceso con " << linea;
+				send(connection, buff1, l, 0);
 			}
 		}
 	}
@@ -159,6 +164,7 @@ void *algoritmoFIFO(void *)
 		if (flag)
 		{
 			cout << "Voy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos." << endl;
+			sleep(p.burst);
 		}
 		else
 		{
@@ -172,7 +178,6 @@ void *algoritmoFIFO(void *)
 	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
 	pthread_exit(NULL);
 }
-
 void *algoritmoSJF(void *)
 {
 	cout << "A partir de ahora se ejecutarán los procesos en orden SJF." << endl;
@@ -213,8 +218,8 @@ void *algoritmoSJF(void *)
 		}
 		else
 		{
-			const auto estampa = chrono::system_clock::now();
 			cout << "Estoy ocioso." << endl;
+			const auto estampa = chrono::system_clock::now();
 			ociosidad.lock();
 			cout << "Llegó alguien y me desperté." << endl;
 			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
@@ -223,10 +228,9 @@ void *algoritmoSJF(void *)
 	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
 	pthread_exit(NULL);
 }
-
-void *algoritmoFIFO(void *)
+void *algoritmoRoundRobin(void *)
 {
-	cout << "A partir de ahora se ejecutarán los procesos en orden FIFO." << endl;
+	cout << "A partir de ahora se ejecutarán los procesos con el algoritmo round robin q=" << q << "." << endl;
 	ociosidad.lock();
 	ociosidad.lock();
 	while (corriendo.load())
@@ -238,18 +242,40 @@ void *algoritmoFIFO(void *)
 		{
 			p = ready.at(0);
 			ready.erase(ready.begin());
+			if (p.burst > q)
+				ready.push_back(p);
 			flag = true;
 		}
 		pthread_mutex_unlock(&readyLock);
 		if (flag)
 		{
-			cout << "Voy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos." << endl;
-			sleep(p.burst);
+
+			int id = p.pid;
+			int burst = p.burst < q ? p.burst : q;
+			cout << "Voy a ejecutar el proceso con pid = " << p.pid << " por " << burst << " segundos." << endl;
+			if (burst == p.burst)
+			{
+				listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
+				sleep(burst);
+				listPCB.at(id).tat = time(NULL) - listPCB.at(id).tat;
+				listPCB.at(id).estado = 1;
+				p.burst = 0;
+				cout << "El proceso terminó de ejecutarse, salió del ready.";
+			}
+			else
+			{
+				listPCB.at(id).wt += burst;
+				sleep(burst);
+				p.burst -= burst;
+				cout << "Al proceso pid = " << id << " le faltan " << p.burst << " segundos por ejecutar, se vuelve a añadir al final del ready." << endl;
+				listPCB.at(id)
+					.estado = 0;
+			}
 		}
 		else
 		{
-			const auto estampa = chrono::system_clock::now();
 			cout << "Estoy ocioso." << endl;
+			const auto estampa = chrono::system_clock::now();
 			ociosidad.lock();
 			cout << "Llegó alguien y me desperté." << endl;
 			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
@@ -303,24 +329,6 @@ void *server(void *)
 	{
 		cout << "Error in thread join " << endl;
 	}
-	while (true)
-	{
-
-		// cout << "Server : ";
-		char input[MAX];
-		string s;
-		s = "";
-		getline(cin, s);
-		int n = s.size();
-		for (int i = 0; i < n; i++)
-		{
-			input[i] = s[i];
-		}
-
-		input[n] = '\0';
-
-		send(connection, input, strlen(input) + 1, 0);
-	}
 	pthread_exit(NULL);
 }
 int main()
@@ -334,7 +342,7 @@ int main()
 		exit(-1);
 	}
 	pthread_t procesador;
-	pthread_create(&procesador, NULL, algoritmoFIFO, NULL);
+	pthread_create(&procesador, NULL, algoritmoRoundRobin, NULL);
 	// pthread_create(&procesador, NULL, algoritmoSJF, NULL);
 	pthread_exit(NULL);
 }
