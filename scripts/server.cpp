@@ -14,6 +14,8 @@ using namespace std;
 using chrono::duration_cast;
 using chrono::milliseconds;
 
+typedef std::chrono::high_resolution_clock Time;
+
 #define MAX 500
 #define port 5200
 
@@ -23,8 +25,16 @@ struct Proceso
 	int prioridad;
 	int pid;
 };
+struct pcb
+{
+	int pid;
+	int estado;
+	time_t wt;
+	time_t tat;
+};
 
 vector<Proceso> ready;
+vector<pcb> listPCB;
 pthread_mutex_t readyLock;
 mutex ociosidad;
 atomic<bool> corriendo(true);
@@ -54,30 +64,163 @@ void *esperaMensaje(void *con)
 					p = ready.at(i);
 					ss << p.burst << ',' << p.prioridad << endl;
 				}
-				ss << "Y estuvo " << tiempoOcioso << " milisegundos haciendo nada." << endl;
+				ss << "Y estuvo " << tiempoOcioso << " milisegundos haciendo nada.\n"
+				   << endl;
+
+				pcb pcb1;
+				ss << "Tabla de TAT y WT" << endl;
+				int cantidad;
+				float sumaWT;
+				float sumaTAT;
+				for (int i = 0; i < listPCB.size(); i++)
+				{
+					pcb1 = listPCB.at(i);
+					if (pcb1.estado == 1)
+					{
+						cantidad += 1;
+						sumaTAT += pcb1.tat;
+						sumaWT += pcb1.wt;
+						ss << "Process ID: " << pcb1.pid << endl;
+						ss << "WT: " << pcb1.wt << "\nTAT: " << pcb1.tat << "\n"
+						   << endl;
+					}
+				}
+				sumaWT = sumaWT / cantidad;
+				sumaTAT = sumaTAT / cantidad;
+				ss << "Promedio de TAT: " << sumaTAT << "\nPromedio WT: " << sumaWT;
+
 				int l = ss.str().length();
 				for (int i = 0; i < l; i++)
 					buff[i] = ss.get();
 				send(connection, buff, l + 1, 0);
 				corriendo = false;
+				pthread_exit(NULL);
+
 				break;
+			}
+			else if (buff[0] == 'c' && buff[1] == 'o' && buff[2] == 'l' && buff[3] == 'a')
+			{
+				stringstream ss;
+				ss << "Estado de la cola de ready!" << endl;
+				ss << "Largo = " << ready.size() << endl;
+				ss << "Elementos:" << endl;
+				Proceso p;
+				for (int i = 0; i < ready.size(); i++)
+				{
+					p = ready.at(i);
+					ss << "PID " << p.pid << ": " << p.burst << ',' << p.prioridad << endl;
+				}
+
+				int l = ss.str().length();
+				for (int i = 0; i < l; i++)
+					buff[i] = ss.get();
+				send(connection, buff, l + 1, 0);
 			}
 			else
 			{
 				string linea = buff;
 				pthread_mutex_lock(&readyLock);
-				ready.push_back({atoi(linea.substr(0, linea.find(',')).c_str()), atoi(linea.substr(linea.find(','), linea.length()).c_str()), pid++});
+				ready.push_back({atoi(linea.substr(0, linea.find(',')).c_str()), atoi(linea.substr(linea.find(',') + 1, linea.length()).c_str()), pid++});
+
+				time_t timer = time(NULL);
+				listPCB.push_back({pid - 1, 0, timer, timer});
 				if (ready.size() == 1)
 					ociosidad.unlock();
 				pthread_mutex_unlock(&readyLock);
-				linea = "pid = " + to_string(pid) + ".";
+				linea = "pid = " + to_string(pid - 1) + ".\n";
+				char buff1[MAX];
 				int l = linea.length();
 				for (int i = 0; i < l; i++)
-					buff[i] = linea.at(i);
-				send(connection, buff, l + 1, 0);
+					buff1[i] = linea.at(i);
+				send(connection, buff1, l + 1, 0);
 			}
 		}
 	}
+	pthread_exit(NULL);
+}
+
+void *algoritmoFIFO(void *)
+{
+	cout << "A partir de ahora se ejecutarán los procesos en orden FIFO." << endl;
+	ociosidad.lock();
+	ociosidad.lock();
+	while (corriendo.load())
+	{
+		Proceso p;
+		bool flag = false;
+		pthread_mutex_lock(&readyLock);
+		if (ready.size() > 0)
+		{
+			p = ready.at(0);
+			ready.erase(ready.begin());
+			flag = true;
+		}
+		pthread_mutex_unlock(&readyLock);
+		if (flag)
+		{
+			cout << "Voy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos." << endl;
+		}
+		else
+		{
+			const auto estampa = chrono::system_clock::now();
+			cout << "Estoy ocioso." << endl;
+			ociosidad.lock();
+			cout << "Llegó alguien y me desperté." << endl;
+			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
+		}
+	}
+	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
+	pthread_exit(NULL);
+}
+
+void *algoritmoSJF(void *)
+{
+	cout << "A partir de ahora se ejecutarán los procesos en orden SJF." << endl;
+	ociosidad.lock();
+	ociosidad.lock();
+	while (corriendo.load())
+	{
+		Proceso p;
+		bool flag = false;
+		pthread_mutex_lock(&readyLock);
+		if (ready.size() > 0)
+		{
+			int menor = 500;
+			Proceso p;
+			int eliminar;
+
+			for (int i = 0; i < ready.size(); i++)
+			{
+				if (ready.at(i).burst < menor)
+				{
+					menor = ready.at(i).burst;
+					eliminar = i;
+				}
+			}
+			p = ready.at(eliminar);
+			ready.erase(ready.begin() + eliminar);
+			flag = true;
+		}
+		pthread_mutex_unlock(&readyLock);
+		if (flag)
+		{
+			int id = p.pid;
+			cout << "Voy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos." << endl;
+			listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
+			sleep(p.burst);
+			listPCB.at(id).tat = time(NULL) - listPCB.at(id).tat;
+			listPCB.at(id).estado = 1;
+		}
+		else
+		{
+			const auto estampa = chrono::system_clock::now();
+			cout << "Estoy ocioso." << endl;
+			ociosidad.lock();
+			cout << "Llegó alguien y me desperté." << endl;
+			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
+		}
+	}
+	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
 	pthread_exit(NULL);
 }
 
@@ -192,5 +335,6 @@ int main()
 	}
 	pthread_t procesador;
 	pthread_create(&procesador, NULL, algoritmoFIFO, NULL);
+	// pthread_create(&procesador, NULL, algoritmoSJF, NULL);
 	pthread_exit(NULL);
 }
