@@ -40,7 +40,7 @@ mutex ociosidad;
 atomic<bool> corriendo(true);
 atomic<int> pid(0);
 atomic<long> tiempoOcioso(0);
-int q = 3;
+const int q = 3;
 void *esperaMensaje(void *con)
 {
 	int connection = *((int *)(&con));
@@ -63,7 +63,7 @@ void *esperaMensaje(void *con)
 				for (int i = 0; i < ready.size(); i++)
 				{
 					p = ready.at(i);
-					ss << p.burst << ',' << p.prioridad << endl;
+					ss << "PID " << p.pid << ": " << p.burst << ',' << p.prioridad << endl;
 				}
 				ss << "Y estuvo " << tiempoOcioso << " milisegundos haciendo nada.\n"
 				   << endl;
@@ -253,7 +253,7 @@ void *algoritmoRoundRobin(void *)
 			int id = p.pid;
 			int burst = p.burst < q ? p.burst : q;
 			cout << "Voy a ejecutar el proceso con pid = " << p.pid << " por " << burst << " segundos." << endl;
-			if (burst == p.burst)
+			if (burst == p.burst || p.burst == 3)
 			{
 				listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
 				sleep(burst);
@@ -266,8 +266,9 @@ void *algoritmoRoundRobin(void *)
 			{
 				listPCB.at(id).wt += burst;
 				sleep(burst);
-				p.burst -= burst;
-				cout << "Al proceso pid = " << id << " le faltan " << p.burst << " segundos por ejecutar, se vuelve a añadir al final del ready." << endl;
+				ready.at(ready.size() - 1).burst -= burst;
+				cout << "waiting time stamp = " << listPCB.at(id).wt << endl;
+				cout << "Al proceso pid = " << id << " le faltan " << ready.at(ready.size() - 1).burst << " segundos por ejecutar, se vuelve a añadir al final del ready." << endl;
 				listPCB.at(id)
 					.estado = 0;
 			}
