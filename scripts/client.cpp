@@ -99,14 +99,14 @@ void *automatico(void *clientSocket)
 	int socket = *((int *)(&clientSocket));
 	string rango;
 	cout << "Ingrese el rango de valores para el burst separados por espacio: ";
-	cin>> rango;
+	getline(cin, rango);
 
 	string a = rango.substr(0, rango.find(" "));
 	string b = rango.substr(rango.find(" ") + 1, rango.find("\n"));
 	int rango1 = stoi(a);
 	int rango2 = stoi(b);
 	cout << rango1 << " " << rango2 << "\n";
-	cin.clear();
+	//cin.clear();
 	int frecuencia;
 	cout << "Ingrese la frecuencia con la que se quiere enviar los procesos: ";
 	cin >> frecuencia;
