@@ -36,32 +36,36 @@ void *manual(void *clientSocket)
 	ifstream file("manual.txt");
 	string str;
 
-	pthread_t threads[3];
+	pthread_t threads[10];
 	int i = 0;
 
 	sleep(2);
 	while (getline(file, str))
 	{
 		i += 1;
-		int frecuencia = rand() % 3 + 8;
-		string b = str.substr(0, str.find(","));
-		string p = str.substr(str.find(",") + 1, str.find("\n"));
-		int burst = stoi(b);
-		int prioridad = stoi(p);
+		try{
+			int frecuencia = rand() % 3 + 8;
+			string b = str.substr(0, str.find(","));
+			string p = str.substr(str.find(",") + 1, str.find("\n"));
+			int burst = stoi(b);
+			int prioridad = stoi(p);
 
-		proceso p1;
-		p1.clientSocket = socket;
-		p1.text = str;
+			proceso p1;
+			p1.clientSocket = socket;
+			p1.text = str;
 
-		int ret = pthread_create(&threads[i], NULL, &SendToSocket, &p1);
-		if (ret != 0)
-		{
-			cout << "Error in thread join " << ret << endl;
+			int ret = pthread_create(&threads[i], NULL, &SendToSocket, &p1);
+			if (ret != 0)
+			{
+				cout << "Error in thread join " << ret << endl;
+			}
+
+			cout << burst << " " << prioridad << "\n"
+				 << flush;
+			sleep(frecuencia);
+		}catch(...){
+			cout<<"Se han enviado todos los procesos";
 		}
-
-		cout << burst << " " << prioridad << "\n"
-			 << flush;
-		sleep(frecuencia);
 	}
 	file.close();
 	pthread_exit(NULL);
@@ -95,7 +99,7 @@ void *automatico(void *clientSocket)
 	int socket = *((int *)(&clientSocket));
 	string rango;
 	cout << "Ingrese el rango de valores para el burst separados por espacio: ";
-	getline(cin, rango);
+	cin>> rango;
 
 	string a = rango.substr(0, rango.find(" "));
 	string b = rango.substr(rango.find(" ") + 1, rango.find("\n"));
@@ -164,9 +168,9 @@ void *cliente(void *)
 	}
 
 	int tipo;
-	//cout << "Seleccione el modo:\n1-Manual\n2-Automatico\n";
-	//cin >> tipo;
-	tipo = 2;
+	cout << "Seleccione el modo:\n1-Manual\n2-Automatico\n";
+	cin >> tipo;
+	//tipo = 2;
 	pthread_t threadModo;
 	pthread_t threadRecibir;
 	if (tipo == 1)
