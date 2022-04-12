@@ -24,6 +24,10 @@ struct Proceso
 	int burst;
 	int prioridad;
 	int pid;
+	bool operator==(const Proceso otro)
+	{
+		return pid == otro.pid;
+	}
 };
 struct pcb
 {
@@ -125,9 +129,9 @@ void *esperaMensaje(void *con)
 				listPCB.push_back({pid - 1, 0, timer, timer});
 				if (ready.size() == 1)
 				{
-					//cout << "Se acaba de añadir el primer proceso, desbloqueando la ociosidad." << endl;
+					// cout << "Se acaba de añadir el primer proceso, desbloqueando la ociosidad." << endl;
 					ociosidad.unlock();
-					//cout << "Se desbloqueó la ociosidad." << endl;
+					// cout << "Se desbloqueó la ociosidad." << endl;
 				}
 				pthread_mutex_unlock(&readyLock);
 				linea = "pid = " + to_string(pid - 1) + ".\n";
@@ -162,7 +166,8 @@ void *algoritmoFIFO(void *)
 		pthread_mutex_unlock(&readyLock);
 		if (flag)
 		{
-			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n" << endl;
+			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n"
+				 << endl;
 			sleep(p.burst);
 		}
 		else
@@ -170,7 +175,7 @@ void *algoritmoFIFO(void *)
 			const auto estampa = chrono::system_clock::now();
 			cout << "Estoy ocioso." << endl;
 			ociosidad.lock();
-			cout << "Llegó alguien y me desperté." << endl;
+
 			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
 		}
 	}
@@ -209,7 +214,8 @@ void *algoritmoSJF(void *)
 		if (flag)
 		{
 			int id = p.pid;
-			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n" << endl;
+			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n"
+				 << endl;
 			listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
 			sleep(p.burst);
 			listPCB.at(id).tat = time(NULL) - listPCB.at(id).tat;
@@ -220,7 +226,56 @@ void *algoritmoSJF(void *)
 			cout << "Estoy ocioso." << endl;
 			const auto estampa = chrono::system_clock::now();
 			ociosidad.lock();
-			cout << "Llegó alguien y me desperté." << endl;
+
+			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
+		}
+	}
+	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
+	pthread_exit(NULL);
+}
+void *algoritmoHPF(void *)
+{
+	cout << "A partir de ahora se ejecutarán los procesos con el algoritmo high priority first." << endl;
+	ociosidad.lock();
+	cout << "Esperando a que hayan procesos para procesar." << endl;
+	ociosidad.lock();
+	while (corriendo.load())
+	{
+		Proceso p;
+		bool flag = false;
+		pthread_mutex_lock(&readyLock);
+		if (ready.size() > 0)
+		{
+			p = ready.at(0);
+			cout << p.burst << ',' << p.prioridad << endl;
+			for (int i = 1; i < ready.size(); i++)
+				if (ready.at(i).prioridad <= p.prioridad)
+					p = ready.at(i);
+			for (int i = 0; i < ready.size(); i++)
+				if (ready.at(i).pid == p.pid)
+				{
+					ready.erase(ready.begin() + i);
+					break;
+				}
+			flag = true;
+		}
+		pthread_mutex_unlock(&readyLock);
+		if (flag)
+		{
+			int id = p.pid;
+			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n"
+				 << endl;
+			listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
+			sleep(p.burst);
+			listPCB.at(id).tat = time(NULL) - listPCB.at(id).tat;
+			listPCB.at(id).estado = 1;
+		}
+		else
+		{
+			cout << "Estoy ocioso." << endl;
+			const auto estampa = chrono::system_clock::now();
+			ociosidad.lock();
+
 			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
 		}
 	}
@@ -229,7 +284,7 @@ void *algoritmoSJF(void *)
 }
 void *algoritmoRoundRobin(void *num)
 {
-	int q = *((int *) num);
+	int q = *((int *)num);
 	cout << "A partir de ahora se ejecutarán los procesos con el algoritmo round robin q=" << q << "." << endl;
 	ociosidad.lock();
 	ociosidad.lock();
@@ -252,7 +307,8 @@ void *algoritmoRoundRobin(void *num)
 
 			int id = p.pid;
 			int burst = p.burst < q ? p.burst : q;
-			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << burst << " segundos.\n" << endl;
+			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << burst << " segundos.\n"
+				 << endl;
 			if (burst == p.burst || p.burst == 3)
 			{
 				listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
@@ -267,7 +323,6 @@ void *algoritmoRoundRobin(void *num)
 				listPCB.at(id).wt += burst;
 				sleep(burst);
 				ready.at(ready.size() - 1).burst -= burst;
-				cout << "waiting time stamp = " << listPCB.at(id).wt << endl;
 				cout << "Al proceso pid = " << id << " le faltan " << ready.at(ready.size() - 1).burst << " segundos por ejecutar, se vuelve a añadir al final del ready." << endl;
 				listPCB.at(id)
 					.estado = 0;
@@ -278,7 +333,7 @@ void *algoritmoRoundRobin(void *num)
 			cout << "Estoy ocioso." << endl;
 			const auto estampa = chrono::system_clock::now();
 			ociosidad.lock();
-			cout << "Llegó alguien y me desperté." << endl;
+
 			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
 		}
 	}
@@ -308,7 +363,7 @@ void *server(void *)
 	int listenStatus = listen(serverSocketHandler, 5);
 	if (listenStatus < 0)
 	{ // when queue is full listen fails
-		cout << "Listner has failed" << endl;
+		cout << "Listener has failed" << endl;
 	}
 	cout << "\t\t...Waiting for connections... \n\n";
 	int clientSocketHandler;
@@ -337,31 +392,40 @@ int main(int argc, char *argv[])
 	int rc;
 	pthread_t threadServer;
 	rc = pthread_create(&threadServer, NULL, server, NULL);
-	if (rc){
+	if (rc)
+	{
 		cout << "Error:unable to create thread," << rc << endl;
 		exit(-1);
 	}
 	pthread_t procesador;
-	if (std::string(argv[1])=="SJF"){
+	if (std::string(argv[1]) == "SJF")
+	{
 		pthread_create(&procesador, NULL, algoritmoSJF, NULL);
 	}
-	else if (std::string(argv[1])=="FIFO"){
+	else if (std::string(argv[1]) == "FIFO")
+	{
 		pthread_create(&procesador, NULL, algoritmoFIFO, NULL);
 	}
-	else if (std::string(argv[1])=="HPF"){
-		//pthread_create(&procesador, NULL, algoritmoSJF, NULL);
-		cout << "hpf" ;
+	else if (std::string(argv[1]) == "HPF")
+	{
+		pthread_create(&procesador, NULL, algoritmoHPF, NULL);
+		cout << "hpf";
 	}
-	else if (std::string(argv[1])=="RR"){
+	else if (std::string(argv[1]) == "RR")
+	{
 		int q;
-		if (argc==3){
-			q=atoi(argv[2]);
-		}else{
-			q=3;
+		if (argc == 3)
+		{
+			q = atoi(argv[2]);
+		}
+		else
+		{
+			q = 3;
 		}
 		pthread_create(&procesador, 0, algoritmoRoundRobin, &q);
 	}
-	else{
+	else
+	{
 		cout << "Parametros de entrada incorrectos\n";
 	}
 	pthread_exit(NULL);
