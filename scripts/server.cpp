@@ -40,7 +40,6 @@ mutex ociosidad;
 atomic<bool> corriendo(true);
 atomic<int> pid(0);
 atomic<long> tiempoOcioso(0);
-const int q = 3;
 void *esperaMensaje(void *con)
 {
 	int connection = *((int *)(&con));
@@ -228,8 +227,9 @@ void *algoritmoSJF(void *)
 	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
 	pthread_exit(NULL);
 }
-void *algoritmoRoundRobin(void *)
+void *algoritmoRoundRobin(void *num)
 {
+	int q = *((int *) num);
 	cout << "A partir de ahora se ejecutarán los procesos con el algoritmo round robin q=" << q << "." << endl;
 	ociosidad.lock();
 	ociosidad.lock();
@@ -332,18 +332,37 @@ void *server(void *)
 	}
 	pthread_exit(NULL);
 }
-int main()
+int main(int argc, char *argv[])
 {
 	int rc;
 	pthread_t threadServer;
 	rc = pthread_create(&threadServer, NULL, server, NULL);
-	if (rc)
-	{
+	if (rc){
 		cout << "Error:unable to create thread," << rc << endl;
 		exit(-1);
 	}
 	pthread_t procesador;
-	pthread_create(&procesador, NULL, algoritmoSJF, NULL);
-	// pthread_create(&procesador, NULL, algoritmoSJF, NULL);
+	if (std::string(argv[1])=="SJF"){
+		pthread_create(&procesador, NULL, algoritmoSJF, NULL);
+	}
+	else if (std::string(argv[1])=="FIFO"){
+		pthread_create(&procesador, NULL, algoritmoFIFO, NULL);
+	}
+	else if (std::string(argv[1])=="HPF"){
+		//pthread_create(&procesador, NULL, algoritmoSJF, NULL);
+		cout << "hpf" ;
+	}
+	else if (std::string(argv[1])=="RR"){
+		int q;
+		if (argc==3){
+			q=atoi(argv[2]);
+		}else{
+			q=3;
+		}
+		pthread_create(&procesador, 0, algoritmoRoundRobin, &q);
+	}
+	else{
+		cout << "Parametros de entrada incorrectos\n";
+	}
 	pthread_exit(NULL);
 }

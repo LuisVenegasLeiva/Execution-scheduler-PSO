@@ -64,7 +64,7 @@ void *manual(void *clientSocket)
 				 << flush;
 			sleep(frecuencia);
 		}catch(...){
-			cout<<"Se han enviado todos los procesos";
+			cout<<"Se han enviado todos los procesos\n";
 		}
 	}
 	file.close();
@@ -106,7 +106,7 @@ void *automatico(void *clientSocket)
 	int rango1 = stoi(a);
 	int rango2 = stoi(b);
 	cout << rango1 << " " << rango2 << "\n";
-
+	cin.clear();
 	int frecuencia;
 	cout << "Ingrese la frecuencia con la que se quiere enviar los procesos: ";
 	cin >> frecuencia;
@@ -168,9 +168,9 @@ void *cliente(void *)
 	}
 
 	int tipo;
-	cout << "Seleccione el modo:\n1-Manual\n2-Automatico\n";
-	cin >> tipo;
-	//tipo = 2;
+	//cout << "Seleccione el modo:\n1-Manual\n2-Automatico\n";
+	//cin >> tipo;
+	tipo = 2;
 	pthread_t threadModo;
 	pthread_t threadRecibir;
 	if (tipo == 1)
