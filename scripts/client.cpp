@@ -137,7 +137,7 @@ void *automatico(void *clientSocket)
 		}
 
 		sleep(frecuencia);
-		// pthread_exit(NULL);
+		pthread_cancel(threads[i]);
 	}
 	pthread_exit(NULL);
 }
@@ -164,18 +164,17 @@ void *cliente(void *)
 	}
 
 	int tipo;
-	// cout << "Seleccione el modo:\n1-Manual\n2-Automatico\n";
-	// cin >> tipo;
+	//cout << "Seleccione el modo:\n1-Manual\n2-Automatico\n";
+	//cin >> tipo;
 	tipo = 2;
-
+	pthread_t threadModo;
+	pthread_t threadRecibir;
 	if (tipo == 1)
 	{
-		pthread_t threadManual;
-		if (pthread_create(&threadManual, NULL, manual, (void *)clientSocket) != 0)
+		if (pthread_create(&threadModo, NULL, manual, (void *)clientSocket) != 0)
 		{
 			cout << "Error in thread join " << endl;
 		}
-		pthread_t threadRecibir;
 		if (pthread_create(&threadRecibir, NULL, enviaMensaje, (void *)clientSocket) != 0)
 		{
 			cout << "Error in thread join " << endl;
@@ -184,7 +183,7 @@ void *cliente(void *)
 	else if (tipo == 2)
 	{
 		pthread_t threadAuto;
-		if (pthread_create(&threadAuto, NULL, automatico, (void *)clientSocket) != 0)
+		if (pthread_create(&threadModo, NULL, automatico, (void *)clientSocket) != 0)
 		{
 			cout << "Error in thread join " << endl;
 		}
@@ -193,15 +192,16 @@ void *cliente(void *)
 	while (true)
 	{
 
-		char receiveMessage[MAX];
+		char receiveMessage[MAX]="";
 		int rMsgSize = recv(clientSocket, receiveMessage, MAX, 0);
 		if (rMsgSize < 0)
 		{
 			cout << "Packet recieve failed." << endl;
 		}
-		else if (rMsgSize == 0)
-		{
+		else if (rMsgSize == 0){
 			cout << "Server is off." << endl;
+			pthread_cancel(threadRecibir);
+			pthread_cancel(threadModo);
 		}
 
 		if (receiveMessage[0] == 'b' && receiveMessage[1] == 'y' && receiveMessage[2] == 'e')

@@ -44,7 +44,7 @@ const int q = 3;
 void *esperaMensaje(void *con)
 {
 	int connection = *((int *)(&con));
-	char buff[MAX];
+	char buff[MAX] = "";
 	while (true)
 	{
 		int rMsgSize;
@@ -126,9 +126,9 @@ void *esperaMensaje(void *con)
 				listPCB.push_back({pid - 1, 0, timer, timer});
 				if (ready.size() == 1)
 				{
-					cout << "Se acaba de añadir el primer proceso, desbloqueando la ociosidad." << endl;
+					//cout << "Se acaba de añadir el primer proceso, desbloqueando la ociosidad." << endl;
 					ociosidad.unlock();
-					cout << "Se desbloqueó la ociosidad." << endl;
+					//cout << "Se desbloqueó la ociosidad." << endl;
 				}
 				pthread_mutex_unlock(&readyLock);
 				linea = "pid = " + to_string(pid - 1) + ".\n";
@@ -163,7 +163,7 @@ void *algoritmoFIFO(void *)
 		pthread_mutex_unlock(&readyLock);
 		if (flag)
 		{
-			cout << "Voy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos." << endl;
+			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n" << endl;
 			sleep(p.burst);
 		}
 		else
@@ -210,7 +210,7 @@ void *algoritmoSJF(void *)
 		if (flag)
 		{
 			int id = p.pid;
-			cout << "Voy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos." << endl;
+			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n" << endl;
 			listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
 			sleep(p.burst);
 			listPCB.at(id).tat = time(NULL) - listPCB.at(id).tat;
@@ -252,7 +252,7 @@ void *algoritmoRoundRobin(void *)
 
 			int id = p.pid;
 			int burst = p.burst < q ? p.burst : q;
-			cout << "Voy a ejecutar el proceso con pid = " << p.pid << " por " << burst << " segundos." << endl;
+			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << burst << " segundos.\n" << endl;
 			if (burst == p.burst || p.burst == 3)
 			{
 				listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
@@ -343,7 +343,7 @@ int main()
 		exit(-1);
 	}
 	pthread_t procesador;
-	pthread_create(&procesador, NULL, algoritmoRoundRobin, NULL);
+	pthread_create(&procesador, NULL, algoritmoSJF, NULL);
 	// pthread_create(&procesador, NULL, algoritmoSJF, NULL);
 	pthread_exit(NULL);
 }
