@@ -43,7 +43,8 @@ void *manual(void *clientSocket)
 	while (getline(file, str))
 	{
 		i += 1;
-		try{
+		try
+		{
 			int frecuencia = rand() % 3 + 8;
 			string b = str.substr(0, str.find(","));
 			string p = str.substr(str.find(",") + 1, str.find("\n"));
@@ -63,8 +64,10 @@ void *manual(void *clientSocket)
 			cout << burst << " " << prioridad << "\n"
 				 << flush;
 			sleep(frecuencia);
-		}catch(...){
-			cout<<"Se han enviado todos los procesos\n";
+		}
+		catch (...)
+		{
+			cout << "Se han enviado todos los procesos\n";
 		}
 	}
 	file.close();
@@ -90,6 +93,8 @@ void *enviaMensaje(void *cSocket)
 			}
 			send(clientSocket, input, strlen(input) + 1, 0);
 		}
+		if (input[0] == 'b' && input[1] == 'y' && input[2] == 'e')
+			break;
 	}
 	pthread_exit(NULL);
 }
@@ -106,7 +111,7 @@ void *automatico(void *clientSocket)
 	int rango1 = stoi(a);
 	int rango2 = stoi(b);
 	cout << rango1 << " " << rango2 << "\n";
-	//cin.clear();
+	// cin.clear();
 	int frecuencia;
 	cout << "Ingrese la frecuencia con la que se quiere enviar los procesos: ";
 	cin >> frecuencia;
@@ -171,8 +176,8 @@ void *cliente(void *)
 	cout << "Seleccione el modo:\n1-Manual\n2-Automatico\n";
 	getline(cin, str);
 	tipo = stoi(str);
-	//cin >> tipo;
-	//tipo = 2;
+	// cin >> tipo;
+	// tipo = 2;
 
 	pthread_t threadModo;
 	pthread_t threadRecibir;
@@ -199,16 +204,19 @@ void *cliente(void *)
 	while (true)
 	{
 
-		char receiveMessage[MAX]="";
+		char receiveMessage[MAX] = "";
 		int rMsgSize = recv(clientSocket, receiveMessage, MAX, 0);
 		if (rMsgSize < 0)
 		{
 			cout << "Packet recieve failed." << endl;
+			exit(-1);
 		}
-		else if (rMsgSize == 0){
+		else if (rMsgSize == 0)
+		{
 			cout << "Server is off." << endl;
 			pthread_cancel(threadRecibir);
 			pthread_cancel(threadModo);
+			exit(-1);
 		}
 
 		if (receiveMessage[0] == 'b' && receiveMessage[1] == 'y' && receiveMessage[2] == 'e')
