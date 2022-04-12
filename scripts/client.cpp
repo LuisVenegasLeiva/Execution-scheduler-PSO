@@ -166,11 +166,14 @@ void *cliente(void *)
 	{
 		cout << "\t\tConnection Established..." << endl;
 	}
-
+	string str;
 	int tipo;
-	//cout << "Seleccione el modo:\n1-Manual\n2-Automatico\n";
+	cout << "Seleccione el modo:\n1-Manual\n2-Automatico\n";
+	getline(cin, str);
+	tipo = stoi(str);
 	//cin >> tipo;
-	tipo = 2;
+	//tipo = 2;
+
 	pthread_t threadModo;
 	pthread_t threadRecibir;
 	if (tipo == 1)
