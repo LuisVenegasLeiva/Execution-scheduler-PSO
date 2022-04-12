@@ -86,6 +86,8 @@ void *enviaMensaje(void *cSocket)
 			}
 			send(clientSocket, input, strlen(input) + 1, 0);
 		}
+		if (input[0] == 'b' && input[1] == 'y' && input[2] == 'e')
+			break;
 	}
 	pthread_exit(NULL);
 }
@@ -198,10 +200,12 @@ void *cliente(void *)
 		if (rMsgSize < 0)
 		{
 			cout << "Packet recieve failed." << endl;
+			exit(-1);
 		}
 		else if (rMsgSize == 0)
 		{
 			cout << "Server is off." << endl;
+			exit(-1);
 		}
 
 		if (receiveMessage[0] == 'b' && receiveMessage[1] == 'y' && receiveMessage[2] == 'e')
