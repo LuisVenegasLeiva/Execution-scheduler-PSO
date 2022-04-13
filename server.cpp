@@ -1,4 +1,3 @@
-#include <fstream>
 #include <bits/stdc++.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -6,13 +5,14 @@
 #include <pthread.h>
 #include <vector>
 #include <atomic>
-#include <sstream>
 #include <chrono>
 #include <mutex>
+#include <sstream>
 
 using namespace std;
 using chrono::duration_cast;
 using chrono::milliseconds;
+static std::chrono::time_point<std::chrono::system_clock> now() { return std::chrono::system_clock::now(); };
 
 typedef std::chrono::high_resolution_clock Time;
 
@@ -44,6 +44,7 @@ mutex ociosidad;
 atomic<bool> corriendo(true);
 atomic<int> pid(0);
 atomic<long> tiempoOcioso(0);
+
 void *esperaMensaje(void *con)
 {
 	int connection = *((int *)(&con));
@@ -53,11 +54,10 @@ void *esperaMensaje(void *con)
 		int rMsgSize;
 		if ((rMsgSize = recv(connection, buff, MAX, 0)) > 0)
 		{
-			cout << "Client : " << buff << endl;
+			cout << "Client: " << buff << endl;
 			if (buff[0] == 'b' && buff[1] == 'y' && buff[2] == 'e')
 			{
-				cout << "Server : Bye " << endl;
-				cout << "\nConnection ended.\n";
+				cout << "\nSe terminó la conexión, enviando resumen al cliente." << endl;
 				stringstream ss;
 				ss << "Estado de la cola de ready!" << endl;
 				ss << "Largo = " << ready.size() << endl;
@@ -92,14 +92,12 @@ void *esperaMensaje(void *con)
 				sumaWT = sumaWT / cantidad;
 				sumaTAT = sumaTAT / cantidad;
 				ss << "Promedio de TAT: " << sumaTAT << "\nPromedio WT: " << sumaWT;
-
 				int l = ss.str().length();
 				for (int i = 0; i < l; i++)
 					buff[i] = ss.get();
 				send(connection, buff, l + 1, 0);
 				corriendo = false;
 				pthread_exit(NULL);
-
 				break;
 			}
 			else if (buff[0] == 'c' && buff[1] == 'o' && buff[2] == 'l' && buff[3] == 'a')
@@ -108,13 +106,8 @@ void *esperaMensaje(void *con)
 				ss << "Estado de la cola de ready!" << endl;
 				ss << "Largo = " << ready.size() << endl;
 				ss << "Elementos:" << endl;
-				Proceso p;
-				for (int i = 0; i < ready.size(); i++)
-				{
-					p = ready.at(i);
-					ss << "PID " << p.pid << ": " << p.burst << ',' << p.prioridad << endl;
-				}
-
+				for (auto p : ready)
+					ss << "PID " << p.burst << ": " << p.burst << ',' << p.prioridad << endl;
 				int l = ss.str().length();
 				for (int i = 0; i < l; i++)
 					buff[i] = ss.get();
@@ -124,22 +117,20 @@ void *esperaMensaje(void *con)
 			{
 				string linea = buff;
 				pthread_mutex_lock(&readyLock);
-				ready.push_back({atoi(linea.substr(0, linea.find(',')).c_str()), atoi(linea.substr(linea.find(',') + 1, linea.length()).c_str()), pid++});
+				ready.push_back(
+					{atoi(linea.substr(0, linea.find(',')).c_str()),
+					 atoi(linea.substr(linea.find(',') + 1, linea.length()).c_str()),
+					 pid++});
 				time_t timer = time(NULL);
 				listPCB.push_back({pid - 1, 0, timer, timer});
 				if (ready.size() == 1)
-				{
-					// cout << "Se acaba de añadir el primer proceso, desbloqueando la ociosidad." << endl;
 					ociosidad.unlock();
-					// cout << "Se desbloqueó la ociosidad." << endl;
-				}
 				pthread_mutex_unlock(&readyLock);
 				linea = "pid = " + to_string(pid - 1) + ".\n";
 				char buff1[MAX];
 				int l = linea.length();
 				for (int i = 0; i < l; i++)
 					buff1[i] = linea.at(i);
-				cout << "Se recibió el proceso con " << linea;
 				send(connection, buff1, l, 0);
 			}
 		}
@@ -149,7 +140,6 @@ void *esperaMensaje(void *con)
 
 void *algoritmoFIFO(void *)
 {
-	cout << "A partir de ahora se ejecutarán los procesos en orden FIFO." << endl;
 	ociosidad.lock();
 	ociosidad.lock();
 	while (corriendo.load())
@@ -166,17 +156,21 @@ void *algoritmoFIFO(void *)
 		pthread_mutex_unlock(&readyLock);
 		if (flag)
 		{
-			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n"
-				 << endl;
+			cout << "Ejecutando el proceso con pid = "
+				 << p.pid << " por " << p.burst << " segundos." << endl;
+			listPCB.at(p.pid).wt = time(NULL) - listPCB.at(p.pid).wt;
 			sleep(p.burst);
+			listPCB.at(p.pid).tat = time(NULL) - listPCB.at(p.pid).tat;
+			listPCB.at(p.pid).estado = 1;
 		}
 		else
 		{
-			const auto estampa = chrono::system_clock::now();
-			cout << "Estoy ocioso." << endl;
+			cout << "El procesador está ocioso, iniciando cronómetro de tiempo ocioso." << endl;
+			const auto estampa = now();
 			ociosidad.lock();
-
-			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
+			tiempoOcioso += duration_cast<milliseconds>(now() - estampa).count();
+			cout << "Se estuvo " << duration_cast<milliseconds>(now() - estampa).count()
+				 << "milisegundos ocioso." << endl;
 		}
 	}
 	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
@@ -184,7 +178,6 @@ void *algoritmoFIFO(void *)
 }
 void *algoritmoSJF(void *)
 {
-	cout << "A partir de ahora se ejecutarán los procesos en orden SJF." << endl;
 	ociosidad.lock();
 	ociosidad.lock();
 	while (corriendo.load())
@@ -214,7 +207,7 @@ void *algoritmoSJF(void *)
 		if (flag)
 		{
 			int id = p.pid;
-			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n"
+			cout << "Ejecutando el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n"
 				 << endl;
 			listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
 			sleep(p.burst);
@@ -223,11 +216,12 @@ void *algoritmoSJF(void *)
 		}
 		else
 		{
-			cout << "Estoy ocioso." << endl;
-			const auto estampa = chrono::system_clock::now();
+			cout << "El procesador está ocioso, iniciando cronómetro de tiempo ocioso." << endl;
+			const auto estampa = now();
 			ociosidad.lock();
-
-			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
+			tiempoOcioso += duration_cast<milliseconds>(now() - estampa).count();
+			cout << "Se estuvo " << duration_cast<milliseconds>(now() - estampa).count()
+				 << "milisegundos ocioso." << endl;
 		}
 	}
 	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
@@ -235,9 +229,7 @@ void *algoritmoSJF(void *)
 }
 void *algoritmoHPF(void *)
 {
-	cout << "A partir de ahora se ejecutarán los procesos con el algoritmo high priority first." << endl;
 	ociosidad.lock();
-	cout << "Esperando a que hayan procesos para procesar." << endl;
 	ociosidad.lock();
 	while (corriendo.load())
 	{
@@ -263,7 +255,7 @@ void *algoritmoHPF(void *)
 		if (flag)
 		{
 			int id = p.pid;
-			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n"
+			cout << "Ejecutando el proceso con pid = " << p.pid << " por " << p.burst << " segundos.\n"
 				 << endl;
 			listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
 			sleep(p.burst);
@@ -272,11 +264,12 @@ void *algoritmoHPF(void *)
 		}
 		else
 		{
-			cout << "Estoy ocioso." << endl;
-			const auto estampa = chrono::system_clock::now();
+			cout << "El procesador está ocioso, iniciando cronómetro de tiempo ocioso." << endl;
+			const auto estampa = now();
 			ociosidad.lock();
-
-			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
+			tiempoOcioso += duration_cast<milliseconds>(now() - estampa).count();
+			cout << "Se estuvo " << duration_cast<milliseconds>(now() - estampa).count()
+				 << "milisegundos ocioso." << endl;
 		}
 	}
 	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
@@ -285,56 +278,59 @@ void *algoritmoHPF(void *)
 void *algoritmoRoundRobin(void *num)
 {
 	int q = *((int *)num);
-	cout << "A partir de ahora se ejecutarán los procesos con el algoritmo round robin q=" << q << "." << endl;
 	ociosidad.lock();
 	ociosidad.lock();
 	while (corriendo.load())
 	{
 		Proceso p;
-		bool flag = false;
+		bool flag = false, flag2 = false;
 		pthread_mutex_lock(&readyLock);
 		if (ready.size() > 0)
 		{
 			p = ready.at(0);
 			ready.erase(ready.begin());
-			if (p.burst > q)
+			p.burst -= q;
+			if (p.burst > 0)
 				ready.push_back(p);
+			else if (p.burst < 0)
+			{
+				p.burst += q;
+				flag2 = true;
+			}
+
 			flag = true;
 		}
 		pthread_mutex_unlock(&readyLock);
 		if (flag)
 		{
-
 			int id = p.pid;
-			int burst = p.burst < q ? p.burst : q;
-			cout << "\nVoy a ejecutar el proceso con pid = " << p.pid << " por " << burst << " segundos.\n"
-				 << endl;
-			if (burst == p.burst || p.burst == 3)
+			int burst = flag2 ? p.burst : q;
+			cout << "Ejecutando el proceso con pid = "
+				 << p.pid << " por " << burst << " segundos." << endl;
+			if (p.burst <= q)
 			{
 				listPCB.at(id).wt = time(NULL) - listPCB.at(id).wt;
 				sleep(burst);
 				listPCB.at(id).tat = time(NULL) - listPCB.at(id).tat;
 				listPCB.at(id).estado = 1;
-				p.burst = 0;
-				cout << "El proceso terminó de ejecutarse, salió del ready.";
 			}
 			else
 			{
 				listPCB.at(id).wt += burst;
 				sleep(burst);
 				ready.at(ready.size() - 1).burst -= burst;
-				cout << "Al proceso pid = " << id << " le faltan " << ready.at(ready.size() - 1).burst << " segundos por ejecutar, se vuelve a añadir al final del ready." << endl;
 				listPCB.at(id)
 					.estado = 0;
 			}
 		}
 		else
 		{
-			cout << "Estoy ocioso." << endl;
-			const auto estampa = chrono::system_clock::now();
+			cout << "El procesador está ocioso, iniciando cronómetro de tiempo ocioso." << endl;
+			const auto estampa = now();
 			ociosidad.lock();
-
-			tiempoOcioso += duration_cast<milliseconds>(chrono::system_clock::now() - estampa).count();
+			tiempoOcioso += duration_cast<milliseconds>(now() - estampa).count();
+			cout << "Se estuvo " << duration_cast<milliseconds>(now() - estampa).count()
+				 << "milisegundos ocioso." << endl;
 		}
 	}
 	cout << "Ya no se van a ejecutar más procesos porque se cerró el server." << endl;
